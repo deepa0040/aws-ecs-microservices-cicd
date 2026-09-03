@@ -3,3 +3,4 @@ terraform*
 ecs/
 README.md
 *.tfstate
+eks/

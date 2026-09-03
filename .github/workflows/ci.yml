@@ -13,13 +13,13 @@ on:
         default: 'ap-south-1'
 
 env:
-  ECR_PRODUCT_REPOSITORY: ecs-demo-products-service
-  ECR_USERS_REPOSITORY: ecs-demo-users-service
-  ECR_ORDERS_REPOSITORY: ecs-demo-orders-service
-  ECR_FRONTEND_REPOSITORY: ecs-demo-frontend
-  ECR_SIDECAR_REPOSITORY: ecs-demo-sidecar-logger
-  ECR_INIT_CHECK_REPOSITORY: ecs-demo-init-check
-  ECR_CRON_REPORT_REPOSITORY: ecs-demo-cron-report
+  ECR_PRODUCT_REPOSITORY: ecs-demo/products-service
+  ECR_USERS_REPOSITORY: ecs-demo/users-service
+  ECR_ORDERS_REPOSITORY: ecs-demo/orders-service
+  ECR_FRONTEND_REPOSITORY: ecs-demo/frontend
+  ECR_SIDECAR_REPOSITORY: ecs-demo/sidecar-logger
+  ECR_INIT_CHECK_REPOSITORY: ecs-demo/init-check
+  ECR_CRON_REPORT_REPOSITORY: ecs-demo/cron-report
 
 jobs:
   build-and-push:
