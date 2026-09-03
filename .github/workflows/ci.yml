@@ -1,0 +1,198 @@
+name: Build and Push Images to ECR
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build and push images from'
+        required: true
+        default: 'main'
+      aws_region:
+        description: 'AWS region for ECR'
+        required: true
+        default: 'ap-south-1'
+
+env:
+  ECR_PRODUCT_REPOSITORY: ecs-demo-products-service
+  ECR_USERS_REPOSITORY: ecs-demo-users-service
+  ECR_ORDERS_REPOSITORY: ecs-demo-orders-service
+  ECR_FRONTEND_REPOSITORY: ecs-demo-frontend
+  ECR_SIDECAR_REPOSITORY: ecs-demo-sidecar-logger
+  ECR_INIT_CHECK_REPOSITORY: ecs-demo-init-check
+  ECR_CRON_REPORT_REPOSITORY: ecs-demo-cron-report
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+
+      # --------------------------------------------------
+      # 1. Checkout source code
+      # --------------------------------------------------
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------
+      # 2. Configure AWS credentials
+      # --------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: github-actions
+          aws-region: ${{ inputs.aws_region }}
+
+      # --------------------------------------------------
+      # 3. Login to Amazon ECR
+      # --------------------------------------------------
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # --------------------------------------------------
+      # 4. Set image tag
+      # --------------------------------------------------
+      - name: Set image tag
+        id: image-tag
+        run: |
+          echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      # --------------------------------------------------
+      # 5. Build PRODUCT image
+      # --------------------------------------------------
+      - name: Build PRODUCT image
+        run: |
+          docker build \
+            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_PRODUCT_REPOSITORY }}:${IMAGE_TAG} \
+            ./services/products
+
+      # --------------------------------------------------
+      # 6. Push PRODUCT image
+      # --------------------------------------------------
+      - name: Push PRODUCT image
+        run: |
+          docker push \
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_PRODUCT_REPOSITORY }}:${IMAGE_TAG}
+
+      # --------------------------------------------------
+      # 7. Build Users image
+      # --------------------------------------------------
+      - name: Build Users image
+        run: |
+          docker build \
+            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_USERS_REPOSITORY }}:${IMAGE_TAG} \
+            ./services/users
+
+      # --------------------------------------------------
+      # 8. Push Users image
+      # --------------------------------------------------
+      - name: Push Users image
+        run: |
+          docker push \
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_USERS_REPOSITORY }}:${IMAGE_TAG}
+
+      # --------------------------------------------------
+      # 9. Build Orders image
+      # --------------------------------------------------
+      - name: Build Orders image
+        run: |
+          docker build \
+            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_ORDERS_REPOSITORY }}:${IMAGE_TAG} \
+            ./services/orders
+
+      # --------------------------------------------------
+      # 10. Push Orders image
+      # --------------------------------------------------
+      - name: Push Orders image
+        run: |
+          docker push \
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_ORDERS_REPOSITORY }}:${IMAGE_TAG}
+
+      # --------------------------------------------------
+      # 11. Build Frontend image
+      # --------------------------------------------------
+      - name: Build Frontend image
+        run: |
+          docker build \
+            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPOSITORY }}:${IMAGE_TAG} \
+            ./services/frontend
+
+      # --------------------------------------------------
+      # 12. Push Frontend image
+      # --------------------------------------------------
+      - name: Push Frontend image
+        run: |
+          docker push \
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPOSITORY }}:${IMAGE_TAG}
+
+
+      # --------------------------------------------------
+      # 13. Build Sidecar image
+      # --------------------------------------------------
+      - name: Build Sidecar-logger image
+        run: |
+          docker build \
+            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_SIDECAR_REPOSITORY }}:${IMAGE_TAG} \
+            ./services/sidecar-logger
+
+      # --------------------------------------------------
+      # 14. Push Sidecar image
+      # --------------------------------------------------
+      - name: Push Sidecar-logger image
+        run: |
+          docker push \
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_SIDECAR_REPOSITORY }}:${IMAGE_TAG}
+
+      # --------------------------------------------------
+      # 15. Build Init Check image
+      # --------------------------------------------------
+      - name: Build Init Check image
+        run: |
+          docker build \
+            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_INIT_Check_REPOSITORY }}:${IMAGE_TAG} \
+            ./services/init-check
+
+      # --------------------------------------------------
+      # 16. Push Init Check image
+      # --------------------------------------------------
+      - name: Push Init Check image
+        run: |
+          docker push \
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_INIT_Check_REPOSITORY }}:${IMAGE_TAG}
+
+      # --------------------------------------------------
+      # 17. Build Cron Report image
+      # --------------------------------------------------
+      - name: Build Cron Report image
+        run: |
+          docker build \
+            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_CRON_REPORT_REPOSITORY }}:${IMAGE_TAG} \
+            ./services/cron-report
+
+      # --------------------------------------------------
+      # 18. Push Cron Report image
+      # --------------------------------------------------
+      - name: Push Cron Report image
+        run: |
+          docker push \
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_CRON_REPORT_REPOSITORY }}:${IMAGE_TAG}
+
+
+      # --------------------------------------------------
+      # 19. Display pushed images
+      # --------------------------------------------------
+      - name: Display image information
+        run: |
+          echo "Images pushed successfully:"
+          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_PRODUCT_REPOSITORY }}:${IMAGE_TAG}"
+          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_USERS_REPOSITORY }}:${IMAGE_TAG}"
+          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_ORDERS_REPOSITORY }}:${IMAGE_TAG}"
+          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPOSITORY }}:${IMAGE_TAG}"
+          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_SIDECAR_REPOSITORY }}:${IMAGE_TAG}"
+          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_INIT_Check_REPOSITORY }}:${IMAGE_TAG}"
+          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_CRON_REPORT_REPOSITORY }}:${IMAGE_TAG}"

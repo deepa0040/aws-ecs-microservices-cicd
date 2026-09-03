@@ -1,0 +1,58 @@
+version: "3.9"
+
+# Local sanity-check environment. Run: docker compose up --build
+# Then open http://localhost:4000
+#
+# NOTE: docker-compose does not natively model ECS/EKS init-containers or
+# task-level sidecars — it's only here so you can verify the microservices
+# talk to each other correctly BEFORE deploying to ECS/EKS, where the real
+# init-container / sidecar / cron behaviour is implemented (see ecs/ and eks/).
+
+services:
+  users-service:
+    build: ./services/users-service
+    ports: ["4001:4001"]
+
+  products-service:
+    build: ./services/products-service
+    ports: ["4002:4002"]
+
+  orders-service:
+    build: ./services/orders-service
+    environment:
+      USERS_SERVICE_URL: http://users-service:4001
+      PRODUCTS_SERVICE_URL: http://products-service:4002
+    depends_on:
+      - users-service
+      - products-service
+    ports: ["4003:4003"]
+
+  # sidecar pattern demo: attached to orders-service, polls it over localhost-equivalent
+  orders-sidecar-logger:
+    build: ./services/sidecar-logger
+    environment:
+      APP_HOST: orders-service
+      APP_PORT: "4003"
+      SIDECAR_INTERVAL_MS: "10000"
+    depends_on:
+      - orders-service
+
+  frontend:
+    build: ./services/frontend
+    environment:
+      ORDERS_SERVICE_URL: http://orders-service:4003
+      USERS_SERVICE_URL: http://users-service:4001
+      PRODUCTS_SERVICE_URL: http://products-service:4002
+    depends_on:
+      - orders-service
+    ports: ["4000:4000"]
+
+  # cron-report demo: run manually to simulate one scheduled execution
+  #   docker compose run --rm cron-report
+  cron-report:
+    build: ./services/cron-report
+    environment:
+      ORDERS_SERVICE_URL: http://orders-service:4003
+    depends_on:
+      - orders-service
+    profiles: ["cron"]

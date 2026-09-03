@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-urls
+  namespace: {{ .Values.namespace }}
+data:
+  USERS_SERVICE_URL: "http://users-service:4001"
+  PRODUCTS_SERVICE_URL: "http://products-service:4002"
+  ORDERS_SERVICE_URL: "http://orders-service:4003"

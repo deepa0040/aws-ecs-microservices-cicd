@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ecs-eks-demo
+description: Demo microservices app (frontend + 3 services) showing init container, sidecar, and cron patterns on EKS
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

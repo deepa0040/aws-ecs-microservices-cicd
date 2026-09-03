@@ -1,0 +1,26 @@
+# CRON BEHAVIOUR on EKS: native CronJob resource — Kubernetes' built-in
+# scheduler creates a new Job (and Pod) on the given schedule, runs
+# cron-report to completion, and cleans it up. Equivalent to the
+# EventBridge Scheduler + ecs:RunTask setup on the ECS side.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cron-report
+  namespace: ecs-eks-demo
+spec:
+  schedule: "*/5 * * * *"        # every 5 minutes
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 60
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: cron-report
+              image: YOUR_REGISTRY/cron-report:latest   # replace with your image
+              envFrom:
+                - configMapRef: { name: service-urls }

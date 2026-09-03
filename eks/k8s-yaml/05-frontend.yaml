@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: ecs-eks-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: frontend }
+  template:
+    metadata:
+      labels: { app: frontend }
+    spec:
+      # simple init container example too: wait for orders-service before
+      # the frontend starts serving (belt & braces alongside readiness probes)
+      initContainers:
+        - name: wait-for-orders-service
+          image: YOUR_REGISTRY/init-check:latest   # replace with your image
+          env:
+            - name: DEPENDENCY_URLS
+              value: "http://orders-service.ecs-eks-demo.svc.cluster.local:4003/health"
+      containers:
+        - name: frontend
+          image: YOUR_REGISTRY/frontend:latest   # replace with your image
+          ports: [{ containerPort: 4000 }]
+          envFrom:
+            - configMapRef: { name: service-urls }
+          readinessProbe:
+            httpGet: { path: /health, port: 4000 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits:   { cpu: "200m", memory: "128Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: ecs-eks-demo
+spec:
+  type: LoadBalancer   # use NodePort instead if running on kind/minikube
+  selector: { app: frontend }
+  ports:
+    - port: 80
+      targetPort: 4000

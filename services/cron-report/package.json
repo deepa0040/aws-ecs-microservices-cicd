@@ -1,0 +1,5 @@
+{
+  "name": "cron-report",
+  "version": "1.0.0",
+  "main": "cron-job.js"
+}

@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: users-service
+  namespace: ecs-eks-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: users-service }
+  template:
+    metadata:
+      labels: { app: users-service }
+    spec:
+      containers:
+        - name: users-service
+          image: YOUR_REGISTRY/users-service:latest   # replace with your image
+          ports: [{ containerPort: 4001 }]
+          readinessProbe:
+            httpGet: { path: /health, port: 4001 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 4001 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits:   { cpu: "200m", memory: "128Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: users-service
+  namespace: ecs-eks-demo
+spec:
+  selector: { app: users-service }
+  ports:
+    - port: 4001
+      targetPort: 4001

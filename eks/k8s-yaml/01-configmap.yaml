@@ -1,0 +1,12 @@
+# Shared config for service-to-service URLs. On EKS, Kubernetes Services
+# already give every Pod cluster DNS like "http://users-service.ecs-eks-demo.svc.cluster.local:4001"
+# — inside the same namespace the short name "http://users-service:4001" works too.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-urls
+  namespace: ecs-eks-demo
+data:
+  USERS_SERVICE_URL: "http://users-service:4001"
+  PRODUCTS_SERVICE_URL: "http://products-service:4002"
+  ORDERS_SERVICE_URL: "http://orders-service:4003"

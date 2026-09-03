@@ -1,0 +1,41 @@
+namespace: ecs-eks-demo
+
+image:
+  registry: YOUR_REGISTRY   # e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/ecs-eks-demo
+  tag: latest
+  pullPolicy: IfNotPresent
+
+frontend:
+  replicas: 1
+  service:
+    type: LoadBalancer   # switch to NodePort for kind/minikube
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { cpu: 200m, memory: 128Mi }
+
+usersService:
+  replicas: 1
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { cpu: 200m, memory: 128Mi }
+
+productsService:
+  replicas: 1
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { cpu: 200m, memory: 128Mi }
+
+ordersService:
+  replicas: 1
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { cpu: 300m, memory: 256Mi }
+  sidecar:
+    resources:
+      requests: { cpu: 25m, memory: 32Mi }
+      limits:   { cpu: 100m, memory: 64Mi }
+    intervalMs: 10000
+
+cron:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid

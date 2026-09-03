@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: products-service
+  namespace: ecs-eks-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: products-service }
+  template:
+    metadata:
+      labels: { app: products-service }
+    spec:
+      containers:
+        - name: products-service
+          image: YOUR_REGISTRY/products-service:latest   # replace with your image
+          ports: [{ containerPort: 4002 }]
+          readinessProbe:
+            httpGet: { path: /health, port: 4002 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 4002 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits:   { cpu: "200m", memory: "128Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: products-service
+  namespace: ecs-eks-demo
+spec:
+  selector: { app: products-service }
+  ports:
+    - port: 4002
+      targetPort: 4002

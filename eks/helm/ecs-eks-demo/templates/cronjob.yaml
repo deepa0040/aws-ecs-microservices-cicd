@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cron-report
+  namespace: {{ .Values.namespace }}
+spec:
+  schedule: "{{ .Values.cron.schedule }}"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: {{ .Values.cron.concurrencyPolicy }}
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 60
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: cron-report
+              image: "{{ .Values.image.registry }}/cron-report:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              envFrom:
+                - configMapRef: { name: service-urls }

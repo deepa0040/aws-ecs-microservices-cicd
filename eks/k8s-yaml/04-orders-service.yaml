@@ -1,0 +1,75 @@
+# ORDERS-SERVICE: demonstrates both INIT CONTAINER and SIDECAR CONTAINER
+# behaviour natively using Kubernetes primitives.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders-service
+  namespace: ecs-eks-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: orders-service }
+  template:
+    metadata:
+      labels: { app: orders-service }
+    spec:
+      # ---------- INIT CONTAINERS ----------
+      # Run sequentially, to completion, BEFORE any regular container starts.
+      # Here we reuse the same init-check image used on the ECS side.
+      initContainers:
+        - name: wait-for-users-service
+          image: YOUR_REGISTRY/init-check:latest   # replace with your image
+          env:
+            - name: DEPENDENCY_URLS
+              value: "http://users-service.ecs-eks-demo.svc.cluster.local:4001/health"
+        - name: wait-for-products-service
+          image: YOUR_REGISTRY/init-check:latest
+          env:
+            - name: DEPENDENCY_URLS
+              value: "http://products-service.ecs-eks-demo.svc.cluster.local:4002/health"
+
+      # ---------- MAIN + SIDECAR CONTAINERS ----------
+      # Both run for the Pod's whole lifetime and share the same network
+      # namespace, so the sidecar reaches the app via "localhost".
+      containers:
+        - name: orders-service
+          image: YOUR_REGISTRY/orders-service:latest   # replace with your image
+          ports: [{ containerPort: 4003 }]
+          envFrom:
+            - configMapRef: { name: service-urls }
+          readinessProbe:
+            httpGet: { path: /health, port: 4003 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 4003 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits:   { cpu: "300m", memory: "256Mi" }
+
+        # SIDECAR: polls the main container over localhost and logs results.
+        - name: sidecar-logger
+          image: YOUR_REGISTRY/sidecar-logger:latest   # replace with your image
+          env:
+            - name: APP_HOST
+              value: "localhost"
+            - name: APP_PORT
+              value: "4003"
+            - name: SIDECAR_INTERVAL_MS
+              value: "10000"
+          resources:
+            requests: { cpu: "25m", memory: "32Mi" }
+            limits:   { cpu: "100m", memory: "64Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders-service
+  namespace: ecs-eks-demo
+spec:
+  selector: { app: orders-service }
+  ports:
+    - port: 4003
+      targetPort: 4003

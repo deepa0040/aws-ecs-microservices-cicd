@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>ECS / EKS Microservices Demo</title>
+<style>
+  :root {
+    --up: #1a7f37;
+    --down: #cf222e;
+    --bg: #f6f8fa;
+    --card: #ffffff;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --accent: #0969da;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    background: #0d1117;
+    color: white;
+    padding: 20px 28px;
+  }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; color: #9198a1; font-size: 13px; }
+  main { padding: 24px 28px; max-width: 1100px; margin: 0 auto; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 28px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 14px; color: #57606a; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-weight: 600; font-size: 14px;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .dot.up { background: var(--up); }
+  .dot.down { background: var(--down); }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  th { background: #f6f8fa; font-size: 11px; text-transform: uppercase; color: #57606a; }
+  tr:last-child td { border-bottom: none; }
+  .section { margin-bottom: 34px; }
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .section-title { font-size: 15px; font-weight: 600; margin: 0; }
+  .meta { color: #57606a; font-size: 12px; margin-top: 8px; }
+  .link-btn { font-size: 12px; color: var(--accent); cursor: pointer; background: none; border: none; padding: 0; }
+  .del-btn { font-size: 12px; color: var(--down); cursor: pointer; background: none; border: 1px solid #ffc1c1; border-radius: 4px; padding: 3px 8px; }
+  .del-btn:hover { background: #fff0f0; }
+  form.inline-form {
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; margin-top: 10px;
+  }
+  form.inline-form input, form.inline-form select {
+    padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
+  }
+  form.inline-form button {
+    padding: 6px 14px; border: none; border-radius: 6px; background: var(--accent);
+    color: white; font-size: 13px; cursor: pointer;
+  }
+  form.inline-form button:hover { background: #0757ba; }
+  .error-msg { color: var(--down); font-size: 12px; margin-top: 6px; display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Microservices Demo Dashboard</h1>
+  <p>frontend &rarr; orders-service &rarr; (users-service + products-service) &middot; try adding/editing/deleting below</p>
+</header>
+<main>
+
+  <div class="section">
+    <div class="section-head">
+      <div class="section-title">Service Health</div>
+      <button class="link-btn" onclick="loadAll()">refresh all</button>
+    </div>
+    <div class="grid" id="status-grid"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Users <span style="font-weight:400;color:#57606a;">(users-service)</span></div>
+    <table>
+      <thead><tr><th>ID</th><th>Name</th><th>Email</th><th></th></tr></thead>
+      <tbody id="users-body"></tbody>
+    </table>
+    <form class="inline-form" id="user-form">
+      <input name="name" placeholder="Name" required>
+      <input name="email" placeholder="Email" required>
+      <button type="submit">Add user</button>
+    </form>
+    <div class="error-msg" id="user-error"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Products <span style="font-weight:400;color:#57606a;">(products-service)</span></div>
+    <table>
+      <thead><tr><th>ID</th><th>Name</th><th>Price (INR)</th><th></th></tr></thead>
+      <tbody id="products-body"></tbody>
+    </table>
+    <form class="inline-form" id="product-form">
+      <input name="name" placeholder="Product name" required>
+      <input name="price" placeholder="Price" type="number" min="0" required>
+      <button type="submit">Add product</button>
+    </form>
+    <div class="error-msg" id="product-error"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Orders <span style="font-weight:400;color:#57606a;">(orders-service &mdash; built live from users + products)</span></div>
+    <table>
+      <thead><tr><th>Order #</th><th>User</th><th>Product</th><th>Qty</th><th>Total</th><th></th></tr></thead>
+      <tbody id="orders-body"></tbody>
+    </table>
+    <form class="inline-form" id="order-form">
+      <select name="userId" id="order-user-select" required></select>
+      <select name="productId" id="order-product-select" required></select>
+      <input name="qty" placeholder="Qty" type="number" min="1" value="1" required style="width:70px">
+      <button type="submit">Create order</button>
+    </form>
+    <div class="error-msg" id="order-error"></div>
+    <div class="meta" id="orders-meta"></div>
+  </div>
+
+</main>
+
+<script>
+let lastUsers = [];
+let lastProducts = [];
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((data && data.error) || `request failed (${res.status})`);
+  return data;
+}
+
+async function loadAll() {
+  await Promise.all([loadDashboardStatus(), loadUsers(), loadProducts(), loadOrders()]);
+}
+
+async function loadDashboardStatus() {
+  const grid = document.getElementById('status-grid');
+  try {
+    const data = await api('/api/dashboard');
+    grid.innerHTML = Object.entries(data.status).map(([name, state]) => {
+      const isUp = state === 'up';
+      return `<div class="card">
+        <h3>${name}</h3>
+        <span class="badge"><span class="dot ${isUp ? 'up' : 'down'}"></span>${state}</span>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    grid.innerHTML = `<div class="card">Failed to load status: ${e.message}</div>`;
+  }
+}
+
+// ---------------- Users ----------------
+async function loadUsers() {
+  const body = document.getElementById('users-body');
+  try {
+    const users = await api('/api/users');
+    lastUsers = users;
+    body.innerHTML = users.map(u => `
+      <tr>
+        <td>#${u.id}</td>
+        <td>${u.name}</td>
+        <td>${u.email}</td>
+        <td><button class="del-btn" onclick="deleteUser(${u.id})">Delete</button></td>
+      </tr>`).join('') || '<tr><td colspan="4">No users</td></tr>';
+    populateSelect('order-user-select', users, u => `#${u.id} ${u.name}`);
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="4">Failed to load: ${e.message}</td></tr>`;
+  }
+}
+
+document.getElementById('user-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const errEl = document.getElementById('user-error');
+  errEl.style.display = 'none';
+  const fd = new FormData(ev.target);
+  try {
+    await api('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: fd.get('name'), email: fd.get('email') })
+    });
+    ev.target.reset();
+    await Promise.all([loadUsers(), loadOrders()]);
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+  }
+});
+
+async function deleteUser(id) {
+  try {
+    await api(`/api/users/${id}`, { method: 'DELETE' });
+    await Promise.all([loadUsers(), loadOrders()]);
+  } catch (e) {
+    alert(`Could not delete user: ${e.message}`);
+  }
+}
+
+// ---------------- Products ----------------
+async function loadProducts() {
+  const body = document.getElementById('products-body');
+  try {
+    const products = await api('/api/products');
+    lastProducts = products;
+    body.innerHTML = products.map(p => `
+      <tr>
+        <td>#${p.id}</td>
+        <td>${p.name}</td>
+        <td>${p.price}</td>
+        <td><button class="del-btn" onclick="deleteProduct(${p.id})">Delete</button></td>
+      </tr>`).join('') || '<tr><td colspan="4">No products</td></tr>';
+    populateSelect('order-product-select', products, p => `#${p.id} ${p.name} (${p.price})`);
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="4">Failed to load: ${e.message}</td></tr>`;
+  }
+}
+
+document.getElementById('product-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const errEl = document.getElementById('product-error');
+  errEl.style.display = 'none';
+  const fd = new FormData(ev.target);
+  try {
+    await api('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: fd.get('name'), price: Number(fd.get('price')) })
+    });
+    ev.target.reset();
+    await Promise.all([loadProducts(), loadOrders()]);
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+  }
+});
+
+async function deleteProduct(id) {
+  try {
+    await api(`/api/products/${id}`, { method: 'DELETE' });
+    await Promise.all([loadProducts(), loadOrders()]);
+  } catch (e) {
+    alert(`Could not delete product: ${e.message}`);
+  }
+}
+
+// ---------------- Orders ----------------
+async function loadOrders() {
+  const body = document.getElementById('orders-body');
+  const meta = document.getElementById('orders-meta');
+  try {
+    const data = await api('/api/orders');
+    if (data.orders && data.orders.length) {
+      body.innerHTML = data.orders.map(o => `
+        <tr>
+          <td>#${o.orderId}</td>
+          <td>${o.user ? o.user.name : '—'}</td>
+          <td>${o.product ? o.product.name : '—'}</td>
+          <td>${o.qty}</td>
+          <td>${o.total ?? '—'}</td>
+          <td><button class="del-btn" onclick="deleteOrder(${o.orderId})">Delete</button></td>
+        </tr>`).join('');
+      meta.textContent = `Generated: ${data.generatedAt} · ${data.count} orders`;
+    } else {
+      body.innerHTML = '<tr><td colspan="6">No orders yet</td></tr>';
+      meta.textContent = '';
+    }
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="6">Failed to load: ${e.message}</td></tr>`;
+  }
+}
+
+document.getElementById('order-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const errEl = document.getElementById('order-error');
+  errEl.style.display = 'none';
+  const fd = new FormData(ev.target);
+  try {
+    await api('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: Number(fd.get('userId')),
+        productId: Number(fd.get('productId')),
+        qty: Number(fd.get('qty'))
+      })
+    });
+    await loadOrders();
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+  }
+});
+
+async function deleteOrder(id) {
+  try {
+    await api(`/api/orders/${id}`, { method: 'DELETE' });
+    await loadOrders();
+  } catch (e) {
+    alert(`Could not delete order: ${e.message}`);
+  }
+}
+
+function populateSelect(selectId, items, labelFn) {
+  const el = document.getElementById(selectId);
+  const current = el.value;
+  el.innerHTML = items.map(i => `<option value="${i.id}">${labelFn(i)}</option>`).join('');
+  if (current && items.some(i => String(i.id) === current)) el.value = current;
+}
+
+loadAll();
+setInterval(loadAll, 20000);
+</script>
+</body>
+</html>

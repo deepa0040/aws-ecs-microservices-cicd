@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: users-service
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.usersService.replicas }}
+  selector:
+    matchLabels: { app: users-service }
+  template:
+    metadata:
+      labels: { app: users-service }
+    spec:
+      containers:
+        - name: users-service
+          image: "{{ .Values.image.registry }}/users-service:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ containerPort: 4001 }]
+          readinessProbe:
+            httpGet: { path: /health, port: 4001 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 4001 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources: {{ toYaml .Values.usersService.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: users-service
+  namespace: {{ .Values.namespace }}
+spec:
+  selector: { app: users-service }
+  ports:
+    - port: 4001
+      targetPort: 4001

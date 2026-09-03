@@ -1,0 +1,66 @@
+# ORDERS-SERVICE: templated version of the init-container + sidecar pattern.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders-service
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.ordersService.replicas }}
+  selector:
+    matchLabels: { app: orders-service }
+  template:
+    metadata:
+      labels: { app: orders-service }
+    spec:
+      initContainers:
+        - name: wait-for-users-service
+          image: "{{ .Values.image.registry }}/init-check:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: DEPENDENCY_URLS
+              value: "http://users-service.{{ .Values.namespace }}.svc.cluster.local:4001/health"
+        - name: wait-for-products-service
+          image: "{{ .Values.image.registry }}/init-check:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: DEPENDENCY_URLS
+              value: "http://products-service.{{ .Values.namespace }}.svc.cluster.local:4002/health"
+      containers:
+        - name: orders-service
+          image: "{{ .Values.image.registry }}/orders-service:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ containerPort: 4003 }]
+          envFrom:
+            - configMapRef: { name: service-urls }
+          readinessProbe:
+            httpGet: { path: /health, port: 4003 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 4003 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources: {{ toYaml .Values.ordersService.resources | nindent 12 }}
+
+        - name: sidecar-logger
+          image: "{{ .Values.image.registry }}/sidecar-logger:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: APP_HOST
+              value: "localhost"
+            - name: APP_PORT
+              value: "4003"
+            - name: SIDECAR_INTERVAL_MS
+              value: "{{ .Values.ordersService.sidecar.intervalMs }}"
+          resources: {{ toYaml .Values.ordersService.sidecar.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders-service
+  namespace: {{ .Values.namespace }}
+spec:
+  selector: { app: orders-service }
+  ports:
+    - port: 4003
+      targetPort: 4003
