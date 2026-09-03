@@ -6,11 +6,11 @@ on:
       branch:
         description: 'Branch to build and push images from'
         required: true
-        default: 'main'
+        default: 'master'
       aws_region:
         description: 'AWS region for ECR'
         required: true
-        default: 'ap-south-1'
+        default: 'us-east-1'
 
 env:
   ECR_PRODUCT_REPOSITORY: ecs-demo/products-service
@@ -73,7 +73,7 @@ jobs:
         run: |
           docker build \
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_PRODUCT_REPOSITORY }}:${IMAGE_TAG} \
-            ./services/products
+            services/products
 
       # --------------------------------------------------
       # 6. Push PRODUCT image
@@ -90,7 +90,7 @@ jobs:
         run: |
           docker build \
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_USERS_REPOSITORY }}:${IMAGE_TAG} \
-            ./services/users
+            services/users
 
       # --------------------------------------------------
       # 8. Push Users image
@@ -107,7 +107,7 @@ jobs:
         run: |
           docker build \
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_ORDERS_REPOSITORY }}:${IMAGE_TAG} \
-            ./services/orders
+            services/orders
 
       # --------------------------------------------------
       # 10. Push Orders image
@@ -124,7 +124,7 @@ jobs:
         run: |
           docker build \
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPOSITORY }}:${IMAGE_TAG} \
-            ./services/frontend
+            services/frontend
 
       # --------------------------------------------------
       # 12. Push Frontend image
@@ -142,7 +142,7 @@ jobs:
         run: |
           docker build \
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_SIDECAR_REPOSITORY }}:${IMAGE_TAG} \
-            ./services/sidecar-logger
+            services/sidecar-logger
 
       # --------------------------------------------------
       # 14. Push Sidecar image
@@ -159,7 +159,7 @@ jobs:
         run: |
           docker build \
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_INIT_Check_REPOSITORY }}:${IMAGE_TAG} \
-            ./services/init-check
+            services/init-check
 
       # --------------------------------------------------
       # 16. Push Init Check image
@@ -176,7 +176,7 @@ jobs:
         run: |
           docker build \
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_CRON_REPORT_REPOSITORY }}:${IMAGE_TAG} \
-            ./services/cron-report
+            services/cron-report
 
       # --------------------------------------------------
       # 18. Push Cron Report image
