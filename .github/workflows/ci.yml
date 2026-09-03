@@ -44,7 +44,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::008893372207:role/ci-testing
           role-session-name: github-actions
           aws-region: ${{ inputs.aws_region }}
 
