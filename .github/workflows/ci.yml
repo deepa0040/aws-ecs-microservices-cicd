@@ -37,6 +37,8 @@ jobs:
       # --------------------------------------------------
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
 
       # --------------------------------------------------
       # 2. Configure AWS credentials
@@ -54,138 +56,106 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+      
+      # Add Docket build cache
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: test
-        run: ls -al
-
+    
       # --------------------------------------------------
       # 4. Set image tag
       # --------------------------------------------------
+      # Set image tag
       - name: Set image tag
-        id: image-tag
-        run: |
-          echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+        run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
-      # --------------------------------------------------
-      # 5. Build PRODUCT image
-      # --------------------------------------------------
-      - name: Build PRODUCT image
-        run: |
-          docker build \
-            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_PRODUCT_REPOSITORY }}:${IMAGE_TAG} \
-            services/products-service
+      # Setup Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      # --------------------------------------------------
-      # 6. Push PRODUCT image
-      # --------------------------------------------------
-      - name: Push PRODUCT image
-        run: |
-          docker push \
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_PRODUCT_REPOSITORY }}:${IMAGE_TAG}
+      # PRODUCTS
+      - name: Build and Push PRODUCT image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/products-service
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_PRODUCT_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_PRODUCT_REPOSITORY }}:latest
+          cache-from: type=gha,scope=products-service
+          cache-to: type=gha,mode=max,scope=products-service
 
-      # --------------------------------------------------
-      # 7. Build Users image
-      # --------------------------------------------------
-      - name: Build Users image
-        run: |
-          docker build \
-            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_USERS_REPOSITORY }}:${IMAGE_TAG} \
-            services/users-service
+      # USERS
+      - name: Build and Push USERS image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/users-service
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_USERS_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_USERS_REPOSITORY }}:latest
+          cache-from: type=gha,scope=users-service
+          cache-to: type=gha,mode=max,scope=users-service
 
-      # --------------------------------------------------
-      # 8. Push Users image
-      # --------------------------------------------------
-      - name: Push Users image
-        run: |
-          docker push \
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_USERS_REPOSITORY }}:${IMAGE_TAG}
+      # ORDERS
+      - name: Build and Push ORDERS image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/orders-service
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_ORDERS_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_ORDERS_REPOSITORY }}:latest
+          cache-from: type=gha,scope=orders-service
+          cache-to: type=gha,mode=max,scope=orders-service
 
-      # --------------------------------------------------
-      # 9. Build Orders image
-      # --------------------------------------------------
-      - name: Build Orders image
-        run: |
-          docker build \
-            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_ORDERS_REPOSITORY }}:${IMAGE_TAG} \
-            services/orders-service
+      # FRONTEND
+      - name: Build and Push FRONTEND image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/frontend
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPOSITORY }}:latest
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
-      # --------------------------------------------------
-      # 10. Push Orders image
-      # --------------------------------------------------
-      - name: Push Orders image
-        run: |
-          docker push \
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_ORDERS_REPOSITORY }}:${IMAGE_TAG}
+      # SIDECAR
+      - name: Build and Push SIDECAR image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/sidecar-logger
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_SIDECAR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_SIDECAR_REPOSITORY }}:latest
+          cache-from: type=gha,scope=sidecar-logger
+          cache-to: type=gha,mode=max,scope=sidecar-logger
 
-      # --------------------------------------------------
-      # 11. Build Frontend image
-      # --------------------------------------------------
-      - name: Build Frontend image
-        run: |
-          docker build \
-            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPOSITORY }}:${IMAGE_TAG} \
-            services/frontend
+      # INIT CHECK
+      - name: Build and Push INIT CHECK image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/init-check
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_INIT_CHECK_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_INIT_CHECK_REPOSITORY }}:latest
+          cache-from: type=gha,scope=init-check
+          cache-to: type=gha,mode=max,scope=init-check
 
-      # --------------------------------------------------
-      # 12. Push Frontend image
-      # --------------------------------------------------
-      - name: Push Frontend image
-        run: |
-          docker push \
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPOSITORY }}:${IMAGE_TAG}
-
-
-      # --------------------------------------------------
-      # 13. Build Sidecar image
-      # --------------------------------------------------
-      - name: Build Sidecar-logger image
-        run: |
-          docker build \
-            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_SIDECAR_REPOSITORY }}:${IMAGE_TAG} \
-            services/sidecar-logger
-
-      # --------------------------------------------------
-      # 14. Push Sidecar image
-      # --------------------------------------------------
-      - name: Push Sidecar-logger image
-        run: |
-          docker push \
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_SIDECAR_REPOSITORY }}:${IMAGE_TAG}
-
-      # --------------------------------------------------
-      # 15. Build Init Check image
-      # --------------------------------------------------
-      - name: Build Init Check image
-        run: |
-          docker build \
-            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_INIT_Check_REPOSITORY }}:${IMAGE_TAG} \
-            services/init-check
-
-      # --------------------------------------------------
-      # 16. Push Init Check image
-      # --------------------------------------------------
-      - name: Push Init Check image
-        run: |
-          docker push \
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_INIT_Check_REPOSITORY }}:${IMAGE_TAG}
-
-      # --------------------------------------------------
-      # 17. Build Cron Report image
-      # --------------------------------------------------
-      - name: Build Cron Report image
-        run: |
-          docker build \
-            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_CRON_REPORT_REPOSITORY }}:${IMAGE_TAG} \
-            services/cron-report
-
-      # --------------------------------------------------
-      # 18. Push Cron Report image
-      # --------------------------------------------------
-      - name: Push Cron Report image
-        run: |
-          docker push \
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_CRON_REPORT_REPOSITORY }}:${IMAGE_TAG}
-
+      # CRON REPORT
+      - name: Build and Push CRON REPORT image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/cron-report
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_CRON_REPORT_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_CRON_REPORT_REPOSITORY }}:latest
+          cache-from: type=gha,scope=cron-report
+          cache-to: type=gha,mode=max,scope=cron-report
 
       # --------------------------------------------------
       # 19. Display pushed images
@@ -198,5 +168,5 @@ jobs:
           echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_ORDERS_REPOSITORY }}:${IMAGE_TAG}"
           echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPOSITORY }}:${IMAGE_TAG}"
           echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_SIDECAR_REPOSITORY }}:${IMAGE_TAG}"
-          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_INIT_Check_REPOSITORY }}:${IMAGE_TAG}"
+          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_INIT_CHECK_REPOSITORY }}:${IMAGE_TAG}"
           echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_CRON_REPORT_REPOSITORY }}:${IMAGE_TAG}"
