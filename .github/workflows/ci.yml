@@ -12,23 +12,40 @@ on:
         required: true
         default: 'us-east-1'
 
-env:
-  ECR_PRODUCT_REPOSITORY: ecs-demo/products-service
-  ECR_USERS_REPOSITORY: ecs-demo/users-service
-  ECR_ORDERS_REPOSITORY: ecs-demo/orders-service
-  ECR_FRONTEND_REPOSITORY: ecs-demo/frontend
-  ECR_SIDECAR_REPOSITORY: ecs-demo/sidecar-logger
-  ECR_INIT_CHECK_REPOSITORY: ecs-demo/init-check
-  ECR_CRON_REPORT_REPOSITORY: ecs-demo/cron-report
-
 jobs:
   build-and-push:
-    name: Build and Push Docker Images
+    name: Build and Push - ${{ matrix.service }}
     runs-on: ubuntu-latest
 
     permissions:
       contents: read
       id-token: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: products-service
+            context: services/products-service
+            repository: ecs-demo/products-service
+          - service: users-service
+            context: services/users-service
+            repository: ecs-demo/users-service
+          - service: orders-service
+            context: services/orders-service
+            repository: ecs-demo/orders-service
+          - service: frontend
+            context: services/frontend
+            repository: ecs-demo/frontend
+          - service: sidecar-logger
+            context: services/sidecar-logger
+            repository: ecs-demo/sidecar-logger
+          - service: init-check
+            context: services/init-check
+            repository: ecs-demo/init-check
+          - service: cron-report
+            context: services/cron-report
+            repository: ecs-demo/cron-report
 
     steps:
 
@@ -56,117 +73,40 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-      
-      # Add Docket build cache
+
+      # --------------------------------------------------
+      # 4. Set up Docker Buildx
+      # --------------------------------------------------
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-    
       # --------------------------------------------------
-      # 4. Set image tag
+      # 5. Set image tag
       # --------------------------------------------------
-      # Set image tag
       - name: Set image tag
         run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
-      # Setup Buildx
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # PRODUCTS
-      - name: Build and Push PRODUCT image
+      # --------------------------------------------------
+      # 6. Build and Push image
+      # --------------------------------------------------
+      - name: Build and Push ${{ matrix.service }} image
         uses: docker/build-push-action@v6
         with:
-          context: services/products-service
+          context: ${{ matrix.context }}
           push: true
+          provenance: false
+          sbom: false
           tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_PRODUCT_REPOSITORY }}:${{ env.IMAGE_TAG }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_PRODUCT_REPOSITORY }}:latest
-          cache-from: type=gha,scope=products-service
-          cache-to: type=gha,mode=max,scope=products-service
-
-      # USERS
-      - name: Build and Push USERS image
-        uses: docker/build-push-action@v6
-        with:
-          context: services/users-service
-          push: true
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_USERS_REPOSITORY }}:${{ env.IMAGE_TAG }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_USERS_REPOSITORY }}:latest
-          cache-from: type=gha,scope=users-service
-          cache-to: type=gha,mode=max,scope=users-service
-
-      # ORDERS
-      - name: Build and Push ORDERS image
-        uses: docker/build-push-action@v6
-        with:
-          context: services/orders-service
-          push: true
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_ORDERS_REPOSITORY }}:${{ env.IMAGE_TAG }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_ORDERS_REPOSITORY }}:latest
-          cache-from: type=gha,scope=orders-service
-          cache-to: type=gha,mode=max,scope=orders-service
-
-      # FRONTEND
-      - name: Build and Push FRONTEND image
-        uses: docker/build-push-action@v6
-        with:
-          context: services/frontend
-          push: true
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPOSITORY }}:${{ env.IMAGE_TAG }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPOSITORY }}:latest
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
-
-      # SIDECAR
-      - name: Build and Push SIDECAR image
-        uses: docker/build-push-action@v6
-        with:
-          context: services/sidecar-logger
-          push: true
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_SIDECAR_REPOSITORY }}:${{ env.IMAGE_TAG }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_SIDECAR_REPOSITORY }}:latest
-          cache-from: type=gha,scope=sidecar-logger
-          cache-to: type=gha,mode=max,scope=sidecar-logger
-
-      # INIT CHECK
-      - name: Build and Push INIT CHECK image
-        uses: docker/build-push-action@v6
-        with:
-          context: services/init-check
-          push: true
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_INIT_CHECK_REPOSITORY }}:${{ env.IMAGE_TAG }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_INIT_CHECK_REPOSITORY }}:latest
-          cache-from: type=gha,scope=init-check
-          cache-to: type=gha,mode=max,scope=init-check
-
-      # CRON REPORT
-      - name: Build and Push CRON REPORT image
-        uses: docker/build-push-action@v6
-        with:
-          context: services/cron-report
-          push: true
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_CRON_REPORT_REPOSITORY }}:${{ env.IMAGE_TAG }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_CRON_REPORT_REPOSITORY }}:latest
-          cache-from: type=gha,scope=cron-report
-          cache-to: type=gha,mode=max,scope=cron-report
+            ${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
       # --------------------------------------------------
-      # 19. Display pushed images
+      # 7. Display pushed image info
       # --------------------------------------------------
       - name: Display image information
         run: |
-          echo "Images pushed successfully:"
-          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_PRODUCT_REPOSITORY }}:${IMAGE_TAG}"
-          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_USERS_REPOSITORY }}:${IMAGE_TAG}"
-          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_ORDERS_REPOSITORY }}:${IMAGE_TAG}"
-          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPOSITORY }}:${IMAGE_TAG}"
-          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_SIDECAR_REPOSITORY }}:${IMAGE_TAG}"
-          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_INIT_CHECK_REPOSITORY }}:${IMAGE_TAG}"
-          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_CRON_REPORT_REPOSITORY }}:${IMAGE_TAG}"
+          echo "Image pushed successfully:"
+          echo "${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.IMAGE_TAG }}"
+          echo "${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:latest"
