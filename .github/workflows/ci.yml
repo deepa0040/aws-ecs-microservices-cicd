@@ -73,7 +73,7 @@ jobs:
         run: |
           docker build \
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_PRODUCT_REPOSITORY }}:${IMAGE_TAG} \
-            services/products
+            services/products-service
 
       # --------------------------------------------------
       # 6. Push PRODUCT image
@@ -90,7 +90,7 @@ jobs:
         run: |
           docker build \
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_USERS_REPOSITORY }}:${IMAGE_TAG} \
-            services/users
+            services/users-service
 
       # --------------------------------------------------
       # 8. Push Users image
@@ -107,7 +107,7 @@ jobs:
         run: |
           docker build \
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_ORDERS_REPOSITORY }}:${IMAGE_TAG} \
-            services/orders
+            services/orders-service
 
       # --------------------------------------------------
       # 10. Push Orders image
