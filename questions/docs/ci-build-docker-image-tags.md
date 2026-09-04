@@ -73,6 +73,51 @@ tags: |
 - ECR is treated as a **content-addressable artifact store with a retention window**, not a permanent audit log.
 - The actual audit trail is git history + CI workflow run history + deployment history (e.g. ECS task definition revisions, ArgoCD/Helm release history) — all referencing the SHA, which stays reproducible even if the built artifact is eventually pruned.
 
+
+### Problem: Handle the "Same Commit Rebuilt" Edge Case
+
+![ci-tags-issue-2](../images/ci-tags-issue-2.png)
+
+- After enabling immutable tags, re-running the pipeline on the same commit produced ONE image with MULTIPLE tags (e.g. `81da6b4-29`, `81da6b4-30`, `e8e0ede`) — all pointing to the same digest.
+- Later, pushing a genuinely NEW commit (`707447f`) still landed on the SAME existing digest, adding yet another tag to the same image instead of creating a new one.
+- This is NOT a bug — it's expected, content-addressed behavior:
+  - Docker builds are content-based, not commit-based. The digest is a hash of the final image layers, not of git history.
+  - Same build inputs (files inside the build context) → same layers → same digest, regardless of which commit or how many times it's built.
+  - ECR immutability blocks overwriting an EXISTING tag, but still allows attaching a NEW tag name to an EXISTING digest.
+  - Result: new tag gets added to the same image instead of creating a duplicate or overwriting anything.
+
+Why a new commit still produced the same digest:
+
+- The commit almost certainly changed something OUTSIDE this service's build context (e.g. `context: services/cron-report`) — such as a different service's folder, a root-level file (README, `.github/workflows/`), or docs.
+- Other possible causes: change excluded by `.dockerignore`, a comment/whitespace-only change, or a source change whose compiled/bundled output is byte-identical.
+- No build arg or label currently embeds the commit SHA into the image, so nothing forces the digest to change per commit.
+
+How to confirm the cause:
+
+- Run: `git diff <old-sha> <new-sha> -- services/cron-report/`
+- Empty result → confirms the build context genuinely didn't change; current behavior is expected and correct.
+- Non-empty result → worth investigating further (e.g. `.dockerignore` misconfiguration).
+
+Optional controls organizations add to make this intentional (not just incidental):
+
+- Duplicate-build guard — check if an image already exists for the current SHA before building; skip build if so.
+- Trigger restriction — use `push` on protected branches as the primary trigger (one commit = one build); keep `workflow_dispatch` as a gated, exceptional fallback.
+- Concurrency groups — prevent two runs on the same ref from racing and pushing at the same time.
+- Digest pinning in deploy manifests — record `service: digest` pairs so drift between "what SHA I think I deployed" and "what's actually running" is caught by a diff, not manual inspection.
+
+Optional fix if per-commit uniqueness is required regardless of content:
+
+- Bake the commit SHA into the image as a label so the digest always changes, even when build output is otherwise identical:
+```dockerfile
+  ARG GIT_SHA
+  LABEL org.opencontainers.image.revision=$GIT_SHA
+```
+```yaml
+  build-args: |
+    GIT_SHA=${{ github.sha }}
+```
+- Trade-off: guarantees strict 1:1 commit-to-image traceability (useful for audit-heavy orgs) at the cost of losing the storage/build-time efficiency of content-addressed reuse.
+
 ## Summary comparison
 
 | Area | Before (current setup) | After (org best practice) |

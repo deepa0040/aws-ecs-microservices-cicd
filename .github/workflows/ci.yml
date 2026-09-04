@@ -12,6 +12,10 @@ on:
         required: true
         default: 'us-west-2'
 
+concurrency:
+  group: build-push-${{ inputs.branch }}
+  cancel-in-progress: true
+
 jobs:
   build-and-push:
     name: Build and Push - ${{ matrix.service }}
@@ -75,25 +79,49 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       # --------------------------------------------------
-      # 4. Set image tag
+      # 4. Set image tags
+      #    - full SHA: immutable audit trail, used by check step below
+      #    - short SHA: human-readable convenience tag
+      #    - short SHA + run number: guarantees uniqueness even on
+      #      repeat runs of the same commit
       # --------------------------------------------------
-      - name: Set image tag
-        run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+      - name: Set image tags
+        run: |
+          echo "FULL_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "RUN_TAG=${GITHUB_SHA::7}-${{ github.run_number }}" >> $GITHUB_ENV
 
       # --------------------------------------------------
-      # 5. Set up Docker Buildx (required for registry
-      #    cache-from/cache-to support)
+      # 5. Duplicate-build guard
+      #    Checks the FULL SHA tag (matches what's actually pushed
+      #    below), so this now correctly detects a repeat build of
+      #    the same commit and skips rebuilding it.
+      # --------------------------------------------------
+      - name: Check if image already exists for this SHA
+        id: check
+        run: |
+          if aws ecr describe-images --repository-name ${{ matrix.repository }} \
+            --image-ids imageTag=${{ env.FULL_SHA }} 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      # --------------------------------------------------
+      # 6. Set up Docker Buildx (required for cache-from/cache-to)
       # --------------------------------------------------
       - name: Set up Docker Buildx
+        if: steps.check.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
 
       # --------------------------------------------------
-      # 6. Build and push image with layer caching
-      #    Cache is stored as a dedicated ":buildcache" tag
-      #    per-service in ECR, so it survives across ephemeral
-      #    runners and doesn't collide between matrix jobs.
+      # 7. Build and push image with GitHub Actions layer caching,
+      #    scoped per service so matrix jobs don't collide.
+      #    Guarded by the same check as step 6 — build only runs
+      #    if this exact commit hasn't already been pushed.
       # --------------------------------------------------
       - name: Build and push ${{ matrix.service }} image
+        if: steps.check.outputs.exists == 'false'
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -101,13 +129,21 @@ jobs:
           provenance: false
           sbom: false
           tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.FULL_SHA }}
             ${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.RUN_TAG }}
           cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }} 
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
       # --------------------------------------------------
-      # 7. Display pushed image info
+      # 8. Display pushed image info
       # --------------------------------------------------
       - name: Display image information
         run: |
-          echo "Image pushed successfully:"
-          echo "${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.IMAGE_TAG }}"
+          if [ "${{ steps.check.outputs.exists }}" == "true" ]; then
+            echo "Skipped — image already exists for this commit:"
+            echo "${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.FULL_SHA }}"
+          else
+            echo "Image pushed successfully:"
+            echo "${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.FULL_SHA }}"
+          fi
