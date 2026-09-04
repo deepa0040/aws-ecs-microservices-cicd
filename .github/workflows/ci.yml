@@ -2,53 +2,112 @@ name: Build and Push Images to ECR
 
 on:
   workflow_dispatch:
-
-env:
-  AWS_REGION: us-east-1          # adjust to your region
+    inputs:
+      branch:
+        description: 'Branch to build and push images from'
+        required: true
+        default: 'master'
+      aws_region:
+        description: 'AWS region for ECR'
+        required: true
+        default: 'us-west-2'
 
 jobs:
   build-and-push:
+    name: Build and Push - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
     strategy:
       fail-fast: false
       matrix:
-        service:
-          - products-service
-          - users-service
-          - orders-service
-          - frontend
-          - sidecar-logger
-          - init-check
-          - cron-report
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write   # needed if using OIDC to assume AWS role
-      contents: read
+        include:
+          - service: products-service
+            context: services/products-service
+            repository: ecs-demo/products-service
+          - service: users-service
+            context: services/users-service
+            repository: ecs-demo/users-service
+          - service: orders-service
+            context: services/orders-service
+            repository: ecs-demo/orders-service
+          - service: frontend
+            context: services/frontend
+            repository: ecs-demo/frontend
+          - service: sidecar-logger
+            context: services/sidecar-logger
+            repository: ecs-demo/sidecar-logger
+          - service: init-check
+            context: services/init-check
+            repository: ecs-demo/init-check
+          - service: cron-report
+            context: services/cron-report
+            repository: ecs-demo/cron-report
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
 
+      # --------------------------------------------------
+      # 1. Checkout source code
+      # --------------------------------------------------
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      # --------------------------------------------------
+      # 2. Configure AWS credentials
+      # --------------------------------------------------
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}   # or use access keys
-          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::008893372207:role/ci-testing
+          role-session-name: github-actions
+          aws-region: ${{ inputs.aws_region }}
 
+      # --------------------------------------------------
+      # 3. Login to Amazon ECR
+      # --------------------------------------------------
       - name: Login to Amazon ECR
-        id: ecr-login
+        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      # --------------------------------------------------
+      # 4. Set image tag
+      # --------------------------------------------------
+      - name: Set image tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      # --------------------------------------------------
+      # 5. Set up Docker Buildx (required for registry
+      #    cache-from/cache-to support)
+      # --------------------------------------------------
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push ${{ matrix.service }}
+      # --------------------------------------------------
+      # 6. Build and push image with layer caching
+      #    Cache is stored as a dedicated ":buildcache" tag
+      #    per-service in ECR, so it survives across ephemeral
+      #    runners and doesn't collide between matrix jobs.
+      # --------------------------------------------------
+      - name: Build and push ${{ matrix.service }} image
         uses: docker/build-push-action@v6
         with:
-          context: ./${{ matrix.service }}          # adjust if your folder layout differs
-          file: ./${{ matrix.service }}/Dockerfile
+          context: ${{ matrix.context }}
           push: true
           tags: |
-            ${{ steps.ecr-login.outputs.registry }}/${{ matrix.service }}:${{ github.sha }}
-            ${{ steps.ecr-login.outputs.registry }}/${{ matrix.service }}:latest
-          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ matrix.service }}:buildcache
-          cache-to: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ matrix.service }}:buildcache,mode=max
+            ${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:latest
+          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:buildcache
+          cache-to: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:buildcache,mode=max
+
+      # --------------------------------------------------
+      # 7. Display pushed image info
+      # --------------------------------------------------
+      - name: Display image information
+        run: |
+          echo "Image pushed successfully:"
+          echo "${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.IMAGE_TAG }}"
