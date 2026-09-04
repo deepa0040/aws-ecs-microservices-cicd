@@ -78,7 +78,7 @@ jobs:
       # 4. Set image tag
       # --------------------------------------------------
       - name: Set image tag
-        run: echo "IMAGE_TAG=${GITHUB_SHA::7}-${{ github.run_number }}" >> $GITHUB_ENV
+        run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       # --------------------------------------------------
       # 5. Set up Docker Buildx (required for registry
