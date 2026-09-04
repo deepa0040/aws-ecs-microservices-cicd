@@ -87,8 +87,7 @@ jobs:
       - name: Build ${{ matrix.service }} image
         run: |
           docker build \
-            -t ${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.IMAGE_TAG }} \
-            -t ${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:latest \
+            -t ${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.IMAGE_TAG }} \   
             ${{ matrix.context }}
 
       # --------------------------------------------------
@@ -97,7 +96,6 @@ jobs:
       - name: Push ${{ matrix.service }} image
         run: |
           docker push ${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.IMAGE_TAG }}
-          docker push ${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:latest
 
       # --------------------------------------------------
       # 7. Display pushed image info
@@ -106,4 +104,3 @@ jobs:
         run: |
           echo "Image pushed successfully:"
           echo "${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.IMAGE_TAG }}"
-          echo "${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:latest"
