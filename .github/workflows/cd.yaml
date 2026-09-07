@@ -1,0 +1,244 @@
+name: Deploy Images to ECS
+
+on:
+  # Trigger automatically once the CI workflow finishes successfully
+  workflow_run:
+    workflows: ["Build and Push Images to ECR"]
+    types:
+      - completed
+
+  # Also allow manual deploys of a specific image tag (e.g. redeploy /
+  # rollback without rebuilding)
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy (7-char short SHA, e.g. a1b2c3d)'
+        required: true
+      aws_region:
+        description: 'AWS region for ECS/ECR'
+        required: true
+        default: 'us-east-1'
+
+# Prevent two deploys to the same cluster from racing each other
+# (e.g. a manual dispatch firing while an automatic deploy is mid-flight).
+concurrency:
+  group: deploy-ecs-demo-cluster
+  cancel-in-progress: false
+
+jobs:
+  # --------------------------------------------------------------------
+  # One job per ECS SERVICE (not per container). Where a task definition
+  # holds multiple containers (orders-service + its sidecar/init
+  # containers), all of them are patched into ONE task-definition.json
+  # and deployed as a single revision, so they can't race/overwrite
+  # each other.
+  #
+  # ASSUMPTION: sidecar-logger and init-check are containers inside the
+  # orders-service task definition family "ecs-demo-orders-service".
+  # Confirm the family name and container names match your actual infra.
+  # --------------------------------------------------------------------
+  deploy-service:
+    name: Deploy - ${{ matrix.group }}
+    runs-on: ubuntu-latest
+
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: products-service
+            ecs_cluster: ecs-demo-cluster
+            ecs_service: products-service
+            task_definition_family: ecs-demo-products-service
+            containers: '[{"name":"products-service","repository":"ecs-demo/products-service"}]'
+
+          - group: users-service
+            ecs_cluster: ecs-demo-cluster
+            ecs_service: users-service
+            task_definition_family: ecs-demo-users-service
+            containers: '[{"name":"users-service","repository":"ecs-demo/users-service"}]'
+
+          # orders-service task def bundles the sidecar + init container too.
+          - group: orders-service
+            ecs_cluster: ecs-demo-cluster
+            ecs_service: orders-service
+            task_definition_family: ecs-demo-orders-service
+            containers: >-
+              [
+                {"name":"orders-service","repository":"ecs-demo/orders-service"},
+                {"name":"sidecar-logger","repository":"ecs-demo/sidecar-logger"},
+                {"name":"init-check","repository":"ecs-demo/init-check"}
+              ]
+
+          - group: frontend
+            ecs_cluster: ecs-demo-cluster
+            ecs_service: frontend
+            task_definition_family: ecs-demo-frontend
+            containers: '[{"name":"frontend","repository":"ecs-demo/frontend"}]'
+
+    steps:
+      # --------------------------------------------------
+      # 1. Checkout the exact commit CI just built (not just default branch)
+      # --------------------------------------------------
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      # --------------------------------------------------
+      # 2. Configure AWS credentials
+      # --------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::008893372207:role/ci-testing
+          role-session-name: github-actions
+          aws-region: ${{ inputs.aws_region || 'us-east-1' }}
+
+      # --------------------------------------------------
+      # 3. Login to Amazon ECR (needed to resolve registry URI)
+      # --------------------------------------------------
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # --------------------------------------------------
+      # 4. Resolve which image tag to deploy
+      # --------------------------------------------------
+      - name: Resolve image tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "IMAGE_TAG=${{ inputs.image_tag }}" >> $GITHUB_ENV
+          else
+            SHA="${{ github.event.workflow_run.head_sha }}"
+            echo "IMAGE_TAG=${SHA::7}" >> $GITHUB_ENV
+          fi
+
+      # --------------------------------------------------
+      # 5. Download current ECS task definition
+      # --------------------------------------------------
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ matrix.task_definition_family }} \
+            --query taskDefinition \
+            > task-definition.json
+
+      # --------------------------------------------------
+      # 6. Patch EVERY container listed for this group into the SAME
+      #    task-definition.json, in one pass, so no container's update
+      #    can be clobbered by another job.
+      # --------------------------------------------------
+      - name: Update container images
+        run: |
+          set -euo pipefail
+          echo '${{ matrix.containers }}' | jq -c '.[]' | while read -r c; do
+            name=$(echo "$c" | jq -r '.name')
+            repo=$(echo "$c" | jq -r '.repository')
+            image="${{ steps.login-ecr.outputs.registry }}/${repo}:${{ env.IMAGE_TAG }}"
+            echo "Setting container '$name' -> $image"
+            jq --arg name "$name" --arg image "$image" \
+              '(.containerDefinitions[] | select(.name == $name) | .image) = $image' \
+              task-definition.json > task-definition.tmp.json
+            mv task-definition.tmp.json task-definition.json
+          done
+
+      # --------------------------------------------------
+      # 7. Deploy the updated task definition to the ECS service
+      # --------------------------------------------------
+      - name: Deploy to ECS service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: task-definition.json
+          service: ${{ matrix.ecs_service }}
+          cluster: ${{ matrix.ecs_cluster }}
+          wait-for-service-stability: true
+
+      # --------------------------------------------------
+      # 8. Display deployment info
+      # --------------------------------------------------
+      - name: Display deployment information
+        run: |
+          echo "Deployed successfully:"
+          echo "Service: ${{ matrix.ecs_service }} (cluster: ${{ matrix.ecs_cluster }})"
+          echo "Family: ${{ matrix.task_definition_family }}"
+          echo "Tag: ${{ env.IMAGE_TAG }}"
+
+  # --------------------------------------------------------------------
+  # cron-report has no long-running ECS service — it's a scheduled task.
+  # We just register a new task-definition revision so the next scheduled
+  # run (e.g. via EventBridge Scheduler / run-task) picks up the new image.
+  #
+  # ASSUMPTION: cron-report is NOT backed by an ECS service. If it
+  # actually is one, move it into the deploy-service matrix instead.
+  # --------------------------------------------------------------------
+  deploy-cron-report:
+    name: Deploy - cron-report (register only)
+    runs-on: ubuntu-latest
+
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::008893372207:role/ci-testing
+          role-session-name: github-actions
+          aws-region: ${{ inputs.aws_region || 'us-east-1' }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Resolve image tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "IMAGE_TAG=${{ inputs.image_tag }}" >> $GITHUB_ENV
+          else
+            SHA="${{ github.event.workflow_run.head_sha }}"
+            echo "IMAGE_TAG=${SHA::7}" >> $GITHUB_ENV
+          fi
+
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ecs-demo-cron-report \
+            --query taskDefinition \
+            > task-definition.json
+
+      - name: Update container image
+        run: |
+          image="${{ steps.login-ecr.outputs.registry }}/ecs-demo/cron-report:${{ env.IMAGE_TAG }}"
+          jq --arg name "cron-report" --arg image "$image" \
+            '(.containerDefinitions[] | select(.name == $name) | .image) = $image' \
+            task-definition.json > task-definition.tmp.json
+          mv task-definition.tmp.json task-definition.json
+
+      - name: Register new task definition revision
+        run: |
+          jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' \
+            task-definition.json > task-definition.register.json
+          aws ecs register-task-definition --cli-input-json file://task-definition.register.json
+
+      - name: Display deployment information
+        run: |
+          echo "Registered new revision for family ecs-demo-cron-report"
+          echo "Image: ${{ steps.login-ecr.outputs.registry }}/ecs-demo/cron-report:${{ env.IMAGE_TAG }}"

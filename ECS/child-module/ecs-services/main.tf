@@ -85,29 +85,29 @@ resource "aws_ecs_service" "orders_service" {
   depends_on = [aws_ecs_service.users_service, aws_ecs_service.products_service]
 }
 
-# resource "aws_ecs_service" "frontend" {
-#   name            = "frontend"
-#   cluster         = var.ecs_cluster_arn
-#   task_definition = var.ecs_task_definitions_arns["frontend"]
-#   desired_count   = 1
-#   launch_type     = "FARGATE"
+resource "aws_ecs_service" "frontend" {
+  name            = "frontend"
+  cluster         = var.ecs_cluster_arn
+  task_definition = var.ecs_task_definitions_arns["frontend"]
+  desired_count   = 1
+  launch_type     = "FARGATE"
 
-#   network_configuration {
-#     subnets          = var.public_subnet_ids
-#     security_groups  = [var.aws_security_ids["tasks"]]
-#     assign_public_ip = true
-#   }
+  network_configuration {
+    subnets          = var.public_subnet_ids
+    security_groups  = [var.aws_security_ids["tasks"]]
+    assign_public_ip = true
+  }
 
-#   service_connect_configuration {
-#     enabled   = true
-#     namespace = var.ecs_service_discovery_namespace
-#   }
+  service_connect_configuration {
+    enabled   = true
+    namespace = var.ecs_service_discovery_namespace
+  }
 
-#   load_balancer {
-#     target_group_arn = var.alb_target_group
-#     container_name   = "frontend"
-#     container_port   = 4000
-#   }
+  load_balancer {
+    target_group_arn = var.alb_target_group
+    container_name   = "frontend"
+    container_port   = 4000
+  }
 
-#   depends_on = [ aws_ecs_service.orders_service]
-# }
+  depends_on = [ aws_ecs_service.orders_service]
+}

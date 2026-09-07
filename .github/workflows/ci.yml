@@ -10,7 +10,7 @@ on:
       aws_region:
         description: 'AWS region for ECR'
         required: true
-        default: 'us-west-2'
+        default: 'us-east-1'
 
 concurrency:
   group: build-push-${{ inputs.branch }}
