@@ -40,7 +40,7 @@ jobs:
   deploy-service:
     name: Deploy - ${{ matrix.group }}
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
 
     if: >
       github.event_name == 'workflow_dispatch' ||
