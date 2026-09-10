@@ -114,3 +114,6 @@ Solution Flow (Immutable Tagging + ECR)
 - Deploy step references the full SHA tag (or digest) explicitly — never a mutable/floating tag like `latest` or branch name.
 - Old images are not deleted by re-runs — they simply accumulate under distinct tags.
 - Lifecycle policy (always-on, IaC-managed) later expires old untagged/excess tagged images on a schedule — not as a side effect of a new push.
+
+### Question: What deployment strategies are supported in Amazon ECS, and how are they implemented? Explain Rolling Update and Blue/Green deployment approaches, including traffic shifting, health checks, and rollback mechanisms.
+
