@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Image tag to deploy (7-char short SHA, e.g. a1b2c3d)'
+        description: 'Image tag to deploy (i.e. release tag, version, or commit SHA)'
         required: true
       aws_region:
         description: 'AWS region for ECS/ECR'

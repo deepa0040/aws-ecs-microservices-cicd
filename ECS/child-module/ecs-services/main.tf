@@ -9,6 +9,15 @@ resource "aws_ecs_service" "users_service" {
   desired_count   = 1
   launch_type     = "FARGATE"
 
+  # --- Rolling update configuration ---
+  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = 100
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
   network_configuration {
     subnets          = var.public_subnet_ids
     security_groups  = [var.aws_security_ids["tasks"]]
@@ -27,6 +36,9 @@ resource "aws_ecs_service" "users_service" {
       }
     }
   }
+  lifecycle {
+    ignore_changes = [ task_definition ]
+  }
 }
 
 resource "aws_ecs_service" "products_service" {
@@ -35,6 +47,15 @@ resource "aws_ecs_service" "products_service" {
   task_definition = var.ecs_task_definitions_arns["products_service"]
   desired_count   = 1
   launch_type     = "FARGATE"
+
+  # --- Rolling update configuration ---
+  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = 100
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
 
   network_configuration {
     subnets          = var.public_subnet_ids
@@ -54,6 +75,10 @@ resource "aws_ecs_service" "products_service" {
       }
     }
   }
+  
+  lifecycle {
+    ignore_changes = [ task_definition ]
+  }
 }
 
 resource "aws_ecs_service" "orders_service" {
@@ -62,6 +87,15 @@ resource "aws_ecs_service" "orders_service" {
   task_definition = var.ecs_task_definitions_arns["orders_service"]
   desired_count   = 1
   launch_type     = "FARGATE"
+
+  # --- Rolling update configuration ---
+  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = 100
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
 
   network_configuration {
     subnets          = var.public_subnet_ids
@@ -83,6 +117,10 @@ resource "aws_ecs_service" "orders_service" {
   }
 
   depends_on = [aws_ecs_service.users_service, aws_ecs_service.products_service]
+
+  lifecycle {
+    ignore_changes = [ task_definition ]
+  }
 }
 
 resource "aws_ecs_service" "frontend" {
@@ -91,6 +129,15 @@ resource "aws_ecs_service" "frontend" {
   task_definition = var.ecs_task_definitions_arns["frontend"]
   desired_count   = 1
   launch_type     = "FARGATE"
+
+  # --- Rolling update configuration ---
+  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = 100
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
 
   network_configuration {
     subnets          = var.public_subnet_ids
@@ -109,5 +156,14 @@ resource "aws_ecs_service" "frontend" {
     container_port   = 4000
   }
 
+  # health_check_grace_period_seconds gives new tasks time to pass ALB
+  # health checks before ECS considers them failed — important since this
+  # service sits behind a load balancer, unlike the others.
+  health_check_grace_period_seconds = 60
+
   depends_on = [ aws_ecs_service.orders_service]
+
+  lifecycle {
+    ignore_changes = [ task_definition ]
+  }
 }
