@@ -87,7 +87,7 @@ jobs:
       # --------------------------------------------------
       - name: Set image tags
         run: |
-          echo "image_tag=${SHA::7}" >> $GITHUB_ENV
+          echo "image_tag=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       # --------------------------------------------------
       # 5. Duplicate-build guard
