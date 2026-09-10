@@ -154,12 +154,39 @@ jobs:
       # 7. Deploy the updated task definition to the ECS service
       # --------------------------------------------------
       - name: Deploy to ECS service
+        id: deploy
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: task-definition.json
           service: ${{ matrix.ecs_service }}
           cluster: ${{ matrix.ecs_cluster }}
           wait-for-service-stability: true
+
+      # --------------------------------------------------
+      # 7b. wait-for-service-stability only confirms the service reached
+      #     SOME stable state — if the circuit breaker rolled back, the
+      #     service is "stable" on the OLD revision and the action above
+      #     still reports success. Explicitly verify the PRIMARY deployment
+      #     is running the task def we just deployed.
+      #     (aws-actions/amazon-ecs-deploy-task-definition#191)
+      # --------------------------------------------------
+      - name: Verify deployment did not roll back
+        run: |
+          set -euo pipefail
+          EXPECTED_TD="${{ steps.deploy.outputs.task-definition-arn }}"
+          PRIMARY_TD=$(aws ecs describe-services \
+            --cluster ${{ matrix.ecs_cluster }} \
+            --services ${{ matrix.ecs_service }} \
+            --query "services[0].deployments[?status=='PRIMARY'].taskDefinition | [0]" \
+            --output text)
+
+          echo "Expected: $EXPECTED_TD"
+          echo "Primary : $PRIMARY_TD"
+
+          if [ "$PRIMARY_TD" != "$EXPECTED_TD" ]; then
+            echo "::error::Deployment rolled back — primary is running $PRIMARY_TD instead of $EXPECTED_TD (likely deployment circuit breaker)."
+            exit 1
+          fi
 
       # --------------------------------------------------
       # 8. Display deployment info
