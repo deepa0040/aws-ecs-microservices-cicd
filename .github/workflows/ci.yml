@@ -87,7 +87,7 @@ jobs:
       # --------------------------------------------------
       - name: Set image tags
         run: |
-          echo "FULL_SHA=${GITHUB_SHA}" >> $GITHUB_ENV
+          echo "image_tag=${SHA::7}" >> $GITHUB_ENV
 
       # --------------------------------------------------
       # 5. Duplicate-build guard
@@ -99,7 +99,7 @@ jobs:
         id: check
         run: |
           if aws ecr describe-images --repository-name ${{ matrix.repository }} \
-            --image-ids imageTag=${{ env.FULL_SHA }} 2>/dev/null; then
+            --image-ids imageTag=${{ env.image_tag }} 2>/dev/null; then
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
@@ -126,7 +126,7 @@ jobs:
           push: true
           provenance: false
           sbom: false
-          tags: ${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.FULL_SHA }}
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.image_tag }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
@@ -137,8 +137,8 @@ jobs:
         run: |
           if [ "${{ steps.check.outputs.exists }}" == "true" ]; then
             echo "Skipped — image already exists for this commit:"
-            echo "${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.FULL_SHA }}"
+            echo "${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.image_tag }}"
           else
             echo "Image pushed successfully:"
-            echo "${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.FULL_SHA }}"
+            echo "${{ steps.login-ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.image_tag }}"
           fi
